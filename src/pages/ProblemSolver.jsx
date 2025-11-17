@@ -180,55 +180,97 @@ const rl = readline.createInterface({
     setActiveTab('results');
     
     try {
-      const input = customInput || problem?.sampleInput || '';
-      const expectedOutput = problem?.sampleOutput?.trim() || '';
-      const result = await executeCode(input);
+      // Get non-hidden test cases from problem.testCases
+      const nonHiddenTestCases = (problem?.testCases || []).filter(tc => !tc.isHidden);
       
-      let runOutput = {
-        success: false,
-        output: '',
-        error: null,
-        time: null,
-        memory: null,
-        passed: false,
-        expectedOutput: expectedOutput,
-        hasExpectedOutput: !!expectedOutput
-      };
-
-      if (result.status.id === 3) {
-        // Accepted
-        const stdout = result.stdout ? decodeURIComponent(escape(atob(result.stdout))) : '';
-        const actualOutput = stdout.trim();
-        const time = result.time ? `${(parseFloat(result.time) * 1000).toFixed(0)}ms` : 'N/A';
-        const memory = result.memory ? `${Math.round(result.memory / 1024)}MB` : 'N/A';
+      // Decide what to run:
+      // 1. If there are non-hidden test cases, run those
+      // 2. Otherwise, run sample input/output
+      if (nonHiddenTestCases.length > 0) {
+        // Run all non-hidden test cases and show full details
+        const results = [];
         
-        runOutput = {
-          success: true,
-          output: actualOutput || '(no output)',
-          time,
-          memory,
-          passed: actualOutput === expectedOutput,
+        for (let i = 0; i < nonHiddenTestCases.length; i++) {
+          const testCase = nonHiddenTestCases[i];
+          const result = await executeCode(testCase.input);
+          
+          const actualOutput = result.status.id === 3 && result.stdout 
+            ? decodeURIComponent(escape(atob(result.stdout))).trim() 
+            : '';
+          const expectedOutput = testCase.output.trim();
+          const passed = result.status.id === 3 && actualOutput === expectedOutput;
+          
+          results.push({
+            testCase: i + 1,
+            passed,
+            hidden: false,
+            statusId: result.status.id,
+            error: result.status.id !== 3 ? (
+              result.compile_output ? decodeURIComponent(escape(atob(result.compile_output))) :
+              result.stderr ? decodeURIComponent(escape(atob(result.stderr))) :
+              result.status.description
+            ) : null,
+            input: testCase.input,
+            expected: expectedOutput,
+            output: actualOutput,
+            time: result.time || 0,
+            memory: result.memory || 0
+          });
+        }
+        
+        setTestResults(results);
+      } else {
+        // No non-hidden test cases, run sample input/output
+        const input = customInput || problem?.sampleInput || '';
+        const expectedOutput = problem?.sampleOutput?.trim() || '';
+        const result = await executeCode(input);
+        
+        let runOutput = {
+          success: false,
+          output: '',
+          error: null,
+          time: null,
+          memory: null,
+          passed: false,
           expectedOutput: expectedOutput,
           hasExpectedOutput: !!expectedOutput
         };
-      } else if (result.status.id === 6) {
-        // Compilation Error
-        const error = result.compile_output ? decodeURIComponent(escape(atob(result.compile_output))) : 'Compilation failed';
-        runOutput.error = `Compilation Error:\n\n${error}`;
-      } else if (result.status.id === 5) {
-        // Time Limit Exceeded
-        runOutput.error = `Time Limit Exceeded\n\nYour code took too long to execute.\nLimit: ${problem?.timeLimit || 2000}ms`;
-      } else if (result.status.id === 11 || result.status.id === 12) {
-        // Runtime Error
-        const stderr = result.stderr ? decodeURIComponent(escape(atob(result.stderr))) : 'Runtime error occurred';
-        runOutput.error = `Runtime Error:\n\n${stderr}`;
-      } else {
-        // Other errors
-        const message = result.message || result.status.description || 'Unknown error';
-        runOutput.error = `Error: ${message}`;
-      }
 
-      setRunResult(runOutput);
+        if (result.status.id === 3) {
+          // Accepted
+          const stdout = result.stdout ? decodeURIComponent(escape(atob(result.stdout))) : '';
+          const actualOutput = stdout.trim();
+          const time = result.time ? `${(parseFloat(result.time) * 1000).toFixed(0)}ms` : 'N/A';
+          const memory = result.memory ? `${Math.round(result.memory / 1024)}MB` : 'N/A';
+          
+          runOutput = {
+            success: true,
+            output: actualOutput || '(no output)',
+            time,
+            memory,
+            passed: actualOutput === expectedOutput,
+            expectedOutput: expectedOutput,
+            hasExpectedOutput: !!expectedOutput
+          };
+        } else if (result.status.id === 6) {
+          // Compilation Error
+          const error = result.compile_output ? decodeURIComponent(escape(atob(result.compile_output))) : 'Compilation failed';
+          runOutput.error = `Compilation Error:\n\n${error}`;
+        } else if (result.status.id === 5) {
+          // Time Limit Exceeded
+          runOutput.error = `Time Limit Exceeded\n\nYour code took too long to execute.\nLimit: ${problem?.timeLimit || 2000}ms`;
+        } else if (result.status.id === 11 || result.status.id === 12) {
+          // Runtime Error
+          const stderr = result.stderr ? decodeURIComponent(escape(atob(result.stderr))) : 'Runtime error occurred';
+          runOutput.error = `Runtime Error:\n\n${stderr}`;
+        } else {
+          // Other errors
+          const message = result.message || result.status.description || 'Unknown error';
+          runOutput.error = `Error: ${message}`;
+        }
+
+        setRunResult(runOutput);
+      }
     } catch (error) {
       setRunResult({
         success: false,
@@ -259,14 +301,21 @@ const rl = readline.createInterface({
     setActiveTab('results');
     
     try {
-      const results = [];
-      const testCases = [
-        { input: problem.sampleInput, output: problem.sampleOutput, hidden: false },
-        ...(problem.hiddenTestCases || []).map(tc => ({ ...tc, hidden: true }))
-      ];
+      // Get hidden and non-hidden test cases from problem.testCases
+      const allTestCases = problem?.testCases || [];
+      const hiddenTestCases = allTestCases.filter(tc => tc.isHidden);
+      const nonHiddenTestCases = allTestCases.filter(tc => !tc.isHidden);
       
-      for (let i = 0; i < testCases.length; i++) {
-        const testCase = testCases[i];
+      // Decide what to run:
+      // 1. If there are hidden test cases, run those
+      // 2. Otherwise, run non-hidden test cases
+      const testCasesToRun = hiddenTestCases.length > 0 ? hiddenTestCases : nonHiddenTestCases;
+      const isRunningHidden = hiddenTestCases.length > 0;
+      
+      const results = [];
+      
+      for (let i = 0; i < testCasesToRun.length; i++) {
+        const testCase = testCasesToRun[i];
         const result = await executeCode(testCase.input);
         
         const actualOutput = result.status.id === 3 && result.stdout 
@@ -278,15 +327,15 @@ const rl = readline.createInterface({
         results.push({
           testCase: i + 1,
           passed,
-          hidden: testCase.hidden,
+          hidden: isRunningHidden, // Mark as hidden if we're running hidden test cases
           statusId: result.status.id,
           error: result.status.id !== 3 ? (
             result.compile_output ? decodeURIComponent(escape(atob(result.compile_output))) :
             result.stderr ? decodeURIComponent(escape(atob(result.stderr))) :
             result.status.description
           ) : null,
-          expected: testCase.hidden ? null : expectedOutput,
-          output: testCase.hidden ? null : actualOutput,
+          expected: isRunningHidden ? null : expectedOutput, // Don't show expected for hidden tests
+          output: isRunningHidden ? null : actualOutput, // Don't show output for hidden tests
           time: result.time || 0,
           memory: result.memory || 0
         });
@@ -571,6 +620,7 @@ const rl = readline.createInterface({
                   </div>
                 ) : (
                   <>
+                    {/* Run results - shows when runCode is executed */}
                     {runResult && (
                       <div className={`run-result-card ${runResult.success ? 'success' : 'error'}`}>
                         <h3 style={{ margin: '0 0 16px 0' }}>
@@ -620,6 +670,7 @@ const rl = readline.createInterface({
                       </div>
                     )}
 
+                    {/* Test results - shows when runCode executes non-hidden tests OR when submitCode executes any tests */}
                     {testResults.length > 0 && (
                       <div className="test-results">
                         <div style={{ 
@@ -633,7 +684,9 @@ const rl = readline.createInterface({
                           border: '1px solid var(--border-color)'
                         }}>
                           <div>
-                            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.3rem' }}>Submission Results</h3>
+                            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.3rem' }}>
+                              {testResults[0]?.hidden ? 'Submission Results' : 'Run Results'}
+                            </h3>
                             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
                               Test cases: {testResults.filter(r => r.passed).length}/{testResults.length} passed
                             </p>
@@ -645,49 +698,56 @@ const rl = readline.createInterface({
                           </div>
                         </div>
                         
-                        {/* Visible test cases with full details */}
-                        {testResults.filter(r => !r.hidden).map((result, idx) => (
+                        {/* Show detailed results for non-hidden test cases (from runCode) */}
+                        {!testResults[0]?.hidden && testResults.map((result, idx) => (
                           <div key={idx} className={`test-result-card ${result.passed ? 'passed' : 'failed'}`}>
                             <div className="test-result-header">
                               <span className="test-number">
-                                📝 Sample Test Case {result.testCase}
+                                📝 Test Case {result.testCase}
                               </span>
                               <span className={`test-status ${result.passed ? 'passed' : 'failed'}`}>
                                 {result.passed ? '✅ Passed' : '❌ Failed'}
                               </span>
                             </div>
                             
-                            {result.error && (
+                            {result.error ? (
                               <div className="test-error">
                                 <strong>Error:</strong>
                                 <pre>{result.error}</pre>
                               </div>
-                            )}
-                            
-                            {!result.passed && result.expected !== null && (
+                            ) : (
                               <>
+                                {result.input && (
+                                  <div className="test-output">
+                                    <strong>Input:</strong>
+                                    <pre>{result.input}</pre>
+                                  </div>
+                                )}
+                                
                                 <div className="test-output">
                                   <strong>Expected Output:</strong>
                                   <pre>{result.expected}</pre>
                                 </div>
+                                
                                 <div className="test-output">
                                   <strong>Your Output:</strong>
                                   <pre>{result.output || '(no output)'}</pre>
                                 </div>
+                                
+                                {result.passed && (
+                                  <div style={{ 
+                                    padding: '12px',
+                                    background: 'rgba(34, 197, 94, 0.1)',
+                                    borderRadius: '8px',
+                                    marginTop: '12px',
+                                    color: '#22c55e',
+                                    fontSize: '0.9rem',
+                                    fontWeight: '600'
+                                  }}>
+                                    ✓ Output matches perfectly!
+                                  </div>
+                                )}
                               </>
-                            )}
-                            
-                            {result.passed && (
-                              <div style={{ 
-                                padding: '12px',
-                                background: 'rgba(34, 197, 94, 0.1)',
-                                borderRadius: '8px',
-                                marginTop: '12px',
-                                color: '#22c55e',
-                                fontSize: '0.9rem'
-                              }}>
-                                ✓ Your output matches the expected output
-                              </div>
                             )}
                             
                             <div className="test-metrics">
@@ -697,10 +757,10 @@ const rl = readline.createInterface({
                           </div>
                         ))}
 
-                        {/* Hidden test cases - enhanced summary */}
-                        {hiddenTotal > 0 && (
-                          <div className={`test-result-card ${hiddenPassed === hiddenTotal ? 'passed' : 'failed'}`} style={{
-                            background: hiddenPassed === hiddenTotal 
+                        {/* Show summary for hidden test cases (from submitCode) */}
+                        {testResults[0]?.hidden && (
+                          <div className={`test-result-card ${testResults.every(r => r.passed) ? 'passed' : 'failed'}`} style={{
+                            background: testResults.every(r => r.passed)
                               ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, rgba(34, 197, 94, 0.1) 100%)'
                               : 'linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(239, 68, 68, 0.1) 100%)'
                           }}>
@@ -708,11 +768,11 @@ const rl = readline.createInterface({
                               <span className="test-number" style={{ fontSize: '1rem' }}>
                                 🔒 Hidden Test Cases
                               </span>
-                              <span className={`test-status ${hiddenPassed === hiddenTotal ? 'passed' : 'failed'}`} style={{
+                              <span className={`test-status ${testResults.every(r => r.passed) ? 'passed' : 'failed'}`} style={{
                                 fontSize: '1.1rem',
                                 fontWeight: '700'
                               }}>
-                                {hiddenPassed}/{hiddenTotal} Passed
+                                {testResults.filter(r => r.passed).length}/{testResults.length} Passed
                               </span>
                             </div>
                             
@@ -721,25 +781,25 @@ const rl = readline.createInterface({
                               padding: '14px',
                               background: 'var(--card-bg)',
                               borderRadius: '8px',
-                              border: `1px solid ${hiddenPassed === hiddenTotal ? '#22c55e' : '#ef4444'}`
+                              border: `1px solid ${testResults.every(r => r.passed) ? '#22c55e' : '#ef4444'}`
                             }}>
                               <div style={{ 
                                 display: 'flex', 
                                 alignItems: 'center',
                                 gap: '10px',
-                                marginBottom: hiddenPassed === hiddenTotal ? '0' : '10px'
+                                marginBottom: testResults.every(r => r.passed) ? '0' : '10px'
                               }}>
                                 <span style={{ fontSize: '1.5rem' }}>
-                                  {hiddenPassed === hiddenTotal ? '🎊' : '⚠️'}
+                                  {testResults.every(r => r.passed) ? '🎊' : '⚠️'}
                                 </span>
                                 <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: '600' }}>
-                                  {hiddenPassed === hiddenTotal 
+                                  {testResults.every(r => r.passed)
                                     ? 'All hidden test cases passed!' 
-                                    : `${hiddenTotal - hiddenPassed} hidden test case(s) failed`
+                                    : `${testResults.length - testResults.filter(r => r.passed).length} hidden test case(s) failed`
                                   }
                                 </p>
                               </div>
-                              {hiddenPassed !== hiddenTotal && (
+                              {!testResults.every(r => r.passed) && (
                                 <p style={{ margin: '8px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                   💡 Review your logic and edge cases. Try debugging with custom inputs.
                                 </p>
@@ -784,7 +844,7 @@ const rl = readline.createInterface({
                   transition: 'all 0.3s'
                 }}
               >
-                {isRunning ? '⏳ Running...' : '▶️ Run'}
+                {isRunning ? '⏳ Running...' : 'Run Code'}
               </button>
               <button 
                 className="btn-editor-action btn-submit"
@@ -801,7 +861,7 @@ const rl = readline.createInterface({
                   transition: 'all 0.3s'
                 }}
               >
-                {isSubmitting ? '⏳ Submitting...' : '✅ Submit'}
+                {isSubmitting ? '⏳ Submitting...' : 'Submit Code'}
               </button>
             </div>
           </div>

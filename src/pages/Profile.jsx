@@ -80,7 +80,6 @@ function Profile() {
   const totalPoints = userData?.totalPoints || 0;
   const totalSubmissions = userData?.totalSubmissions || 0;
   const contestsParticipated = userData?.contestsParticipated || 0;
-  const globalRank = userData?.globalRank || 0;
   const recentActivities = userData?.recentActivities || [];
   const joinedDate = userData?.createdAt?.toDate() || (currentUser.metadata?.creationTime ? new Date(currentUser.metadata.creationTime) : new Date());
 
@@ -134,7 +133,8 @@ function Profile() {
           <div style={{
             fontSize: "0.9rem",
             color: "var(--text-muted)",
-            marginTop: "8px",
+            marginTop: "0",
+            marginBottom: "0",
             display: "flex",
             alignItems: "center",
             gap: "6px"
@@ -143,7 +143,7 @@ function Profile() {
             <span>Member since {joinedDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
           </div>
 
-          <button className="edit-profile btn" onClick={() => setEditOpen(true)}>
+          <button className="edit-profile btn" onClick={() => setEditOpen(true)} style={{ marginTop: "20px" }}>
             ✏️ Edit Profile
           </button>
 
@@ -175,11 +175,6 @@ function Profile() {
             <div className="stat-item">
               <span className="stat-value">{contestsParticipated}</span>
               <span className="stat-label">Contests</span>
-            </div>
-
-            <div className="stat-item">
-              <span className="stat-value">{globalRank || 'Unranked'}</span>
-              <span className="stat-label">Global Rank</span>
             </div>
           </div>
         </div>
@@ -547,17 +542,6 @@ function Profile() {
               </button>
             </div>
           )}
-        </div>
-
-        {/* Badges - Coming Soon */}
-        <div className="grid-child">
-          <h2>🏅 Badges</h2>
-          <div className="badges-grid">
-            <div className="badge-placeholder">
-              <span style={{ fontSize: '2.5rem' }}>🎖️</span>
-              <p>Coming Soon!</p>
-            </div>
-          </div>
         </div>
       </div>
 

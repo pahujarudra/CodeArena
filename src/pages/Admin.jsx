@@ -175,6 +175,13 @@ function Admin() {
     }
   }, [selectedContest]);
 
+  // Load all problems when switching to problems tab without selected contest
+  useEffect(() => {
+    if (activeTab === "problems" && !selectedContest) {
+      loadProblems();
+    }
+  }, [activeTab]);
+
   if (loading) {
     return (
       <section id="admin" className="page">
@@ -223,8 +230,16 @@ function Admin() {
 
   return (
     <section id="admin" className="page admin-page">
+      {/* Animated Background */}
+      <div className="admin-bg-decoration">
+        <div className="admin-orb admin-orb-1"></div>
+        <div className="admin-orb admin-orb-2"></div>
+        <div className="admin-orb admin-orb-3"></div>
+      </div>
+
       <div className="admin-header">
-        <h1>⚙️ Admin Panel</h1>
+        <div className="admin-header-icon">⚙️</div>
+        <h1>Admin Dashboard</h1>
         <p>Manage contests, problems, and platform content</p>
       </div>
 
@@ -236,80 +251,98 @@ function Admin() {
             setSelectedContest(null);
           }}
         >
-          📋 Contests
+          <span className="tab-icon">📋</span>
+          <span className="tab-text">Contests</span>
         </button>
         <button 
           className={`tab-btn ${activeTab === "problems" ? "active" : ""}`}
           onClick={() => setActiveTab("problems")}
         >
-          💻 Problems
+          <span className="tab-icon">💻</span>
+          <span className="tab-text">Problems</span>
         </button>
       </div>
 
       {activeTab === "contests" && (
         <div className="admin-content">
           <div className="admin-toolbar">
-            <h2>Contest Management</h2>
+            <div className="toolbar-left">
+              <h2>Contest Management</h2>
+              <p className="toolbar-subtitle">{contests.length} total contest{contests.length !== 1 ? 's' : ''}</p>
+            </div>
             <button className="btn btn-primary" onClick={() => setShowAddContest(true)}>
-              + Add Contest
+              <span>+</span> Add Contest
             </button>
           </div>
 
           {contests.length === 0 ? (
             <div className="empty-state">
-              <p style={{ fontSize: "3rem" }}>📝</p>
+              <div className="empty-state-icon">📝</div>
               <h3>No contests yet</h3>
               <p>Create your first contest to get started</p>
+              <button className="btn btn-primary" onClick={() => setShowAddContest(true)}>
+                <span>+</span> Create Contest
+              </button>
             </div>
           ) : (
             <div className="admin-grid">
               {contests.map(contest => (
                 <div 
                   key={contest.id} 
-                  className="admin-card"
+                  className="admin-card contest-card"
                   onClick={() => {
                     setSelectedContest(contest.id);
                     setActiveTab("problems");
                   }}
-                  style={{ cursor: "pointer" }}
                 >
                   <div className="admin-card-header">
                     <h3>{contest.title}</h3>
-                    <div className="admin-card-actions">
-                      <button 
-                        className="btn-icon btn-danger" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteContest(contest.id);
-                        }}
-                        title="Delete Contest"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    <button 
+                      className="btn-icon btn-delete" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteContest(contest.id);
+                      }}
+                      title="Delete Contest"
+                    >
+                      <span>🗑️</span>
+                    </button>
                   </div>
                   
                   <p className="admin-card-description">{contest.description}</p>
                   
                   <div className="admin-card-meta">
-                    <div>
-                      <span><strong>Start:</strong></span>
-                      <span>{contest.startTime?.toLocaleString("en-IN", { 
-                        dateStyle: "short", 
-                        timeStyle: "short" 
-                      })}</span>
+                    <div className="meta-item">
+                      <span className="meta-icon">📅</span>
+                      <div className="meta-content">
+                        <span className="meta-label">Start:</span>
+                        <span className="meta-value">{contest.startTime?.toLocaleString("en-IN", { 
+                          dateStyle: "short", 
+                          timeStyle: "short" 
+                        })}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span><strong>End:</strong></span>
-                      <span>{contest.endTime?.toLocaleString("en-IN", { 
-                        dateStyle: "short", 
-                        timeStyle: "short" 
-                      })}</span>
+                    <div className="meta-item">
+                      <span className="meta-icon">🏁</span>
+                      <div className="meta-content">
+                        <span className="meta-label">End:</span>
+                        <span className="meta-value">{contest.endTime?.toLocaleString("en-IN", { 
+                          dateStyle: "short", 
+                          timeStyle: "short" 
+                        })}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span><strong>Problems:</strong></span>
-                      <span>{contest.problemCount}</span>
+                    <div className="meta-item">
+                      <span className="meta-icon">📝</span>
+                      <div className="meta-content">
+                        <span className="meta-label">Problems:</span>
+                        <span className="meta-value">{contest.problemCount}</span>
+                      </div>
                     </div>
+                  </div>
+                  
+                  <div className="card-overlay">
+                    <span>View Problems →</span>
                   </div>
                 </div>
               ))}
@@ -321,15 +354,18 @@ function Admin() {
       {activeTab === "problems" && (
         <div className="admin-content">
           <div className="admin-toolbar">
-            <div>
+            <div className="toolbar-left">
               <h2>Problem Management</h2>
               {selectedContest && (
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginTop: "4px" }}>
-                  Filtering by: {contests.find(c => c.id === selectedContest)?.title || "Unknown Contest"}
+                <p className="toolbar-subtitle">
+                  Contest: {contests.find(c => c.id === selectedContest)?.title || "Unknown"}
                 </p>
               )}
+              {!selectedContest && (
+                <p className="toolbar-subtitle">{problems.length} total problem{problems.length !== 1 ? 's' : ''}</p>
+              )}
             </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div className="toolbar-right">
               {selectedContest && (
                 <button 
                   className="btn btn-secondary" 
@@ -338,12 +374,18 @@ function Admin() {
                     loadProblems();
                   }}
                 >
-                  Show All Problems
+                  Show All
                 </button>
               )}
               <select 
                 value={selectedContest || ""} 
-                onChange={(e) => setSelectedContest(e.target.value || null)}
+                onChange={(e) => {
+                  const contestId = e.target.value || null;
+                  setSelectedContest(contestId);
+                  if (!contestId) {
+                    loadProblems();
+                  }
+                }}
                 className="contest-filter"
               >
                 <option value="">All Contests</option>
@@ -357,62 +399,86 @@ function Admin() {
                 disabled={!selectedContest}
                 title={!selectedContest ? "Please select a contest first" : ""}
               >
-                + Add Problem
+                <span>+</span> Add Problem
               </button>
             </div>
           </div>
 
           {problems.length === 0 ? (
             <div className="empty-state">
-              <p style={{ fontSize: "3rem" }}>💡</p>
+              <div className="empty-state-icon">💡</div>
               <h3>No problems yet</h3>
               <p>{selectedContest ? "Add problems to this contest" : "Select a contest and add problems"}</p>
+              {selectedContest && (
+                <button className="btn btn-primary" onClick={() => setShowAddProblem(true)}>
+                  <span>+</span> Add Problem
+                </button>
+              )}
             </div>
           ) : (
-            <div className="problems-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Difficulty</th>
-                    <th>Points</th>
-                    <th>Time Limit</th>
-                    <th>Test Cases</th>
-                    <th>Submissions</th>
-                    <th>Accepted</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {problems.map(problem => (
-                    <tr key={problem.id}>
-                      <td><strong>{problem.title}</strong></td>
-                      <td>
-                        <span style={{ 
-                          color: getDifficultyColor(problem.difficulty),
-                          fontWeight: "600"
-                        }}>
-                          {problem.difficulty}
-                        </span>
-                      </td>
-                      <td>{problem.points}</td>
-                      <td>{problem.timeLimit}ms</td>
-                      <td>{problem.testCaseCount}</td>
-                      <td>{problem.submissions || 0}</td>
-                      <td>{problem.accepted || 0}</td>
-                      <td>
-                        <button 
-                          className="btn-icon btn-danger"
-                          onClick={() => deleteProblem(problem.id)}
-                          title="Delete Problem"
-                        >
-                          🗑️
-                        </button>
-                      </td>
+            <div className="problems-table-wrapper">
+              <div className="problems-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Problem Title</th>
+                      <th>Difficulty</th>
+                      <th>Points</th>
+                      <th>Time Limit</th>
+                      <th>Test Cases</th>
+                      <th>Submissions</th>
+                      <th>Accepted</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {problems.map(problem => (
+                      <tr key={problem.id}>
+                        <td>
+                          <div className="problem-title-cell">
+                            <span className="problem-icon">💻</span>
+                            <strong>{problem.title}</strong>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="difficulty-badge-admin" style={{ 
+                            background: getDifficultyColor(problem.difficulty) + '15',
+                            color: getDifficultyColor(problem.difficulty),
+                            border: `1px solid ${getDifficultyColor(problem.difficulty)}30`
+                          }}>
+                            {problem.difficulty}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="points-badge">{problem.points}</span>
+                        </td>
+                        <td>{problem.timeLimit}ms</td>
+                        <td>
+                          <span className="count-badge">{problem.testCaseCount}</span>
+                        </td>
+                        <td>{problem.submissions || 0}</td>
+                        <td>
+                          <span style={{ 
+                            color: (problem.accepted || 0) > 0 ? '#22c55e' : 'var(--text-secondary)',
+                            fontWeight: '600'
+                          }}>
+                            {problem.accepted || 0}
+                          </span>
+                        </td>
+                        <td>
+                          <button 
+                            className="btn-icon btn-delete"
+                            onClick={() => deleteProblem(problem.id)}
+                            title="Delete Problem"
+                          >
+                            <span>🗑️</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
