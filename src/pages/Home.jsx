@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
+import { contestAPI } from "../utils/api";
 import PropTypes from "prop-types";
 
 // Animated Counter Component
@@ -104,23 +103,22 @@ function Home({ setSignupOpen }) {
   const loadActiveContest = async () => {
     try {
       setLoading(true);
-      console.log("Loading active contests from Firestore...");
-      const snap = await getDocs(collection(db, "contests"));
-      console.log("Home - Contests snapshot received. Empty?", snap.empty, "Size:", snap.size);
+      console.log("Loading active contests from API...");
+      const contests = await contestAPI.getAll();
+      console.log("Home - Contests received:", contests);
       
       const now = new Date();
       let active = null;
 
-      snap.forEach(doc => {
-        const data = doc.data();
-        const start = data.startTime?.toDate();
-        const end = data.endTime?.toDate();
+      contests.forEach(contest => {
+        const start = new Date(contest.startTime);
+        const end = new Date(contest.endTime);
 
         if (start && end && start <= now && end >= now) {
           active = {
-            id: doc.id,
-            title: data.title,
-            description: data.description,
+            id: contest.contestId,
+            title: contest.title,
+            description: contest.description,
             start,
             end
           };

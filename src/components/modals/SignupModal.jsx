@@ -1,18 +1,14 @@
-import { auth, db } from "../../firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { VALIDATION, INITIAL_USER_STATS } from "../../utils/constants";
-import { formatAuthError } from "../../utils/errorHandling";
 
 function SignupModal({ open, setOpen }) {
-  const { setCurrentUser } = useAuth();
+  const { signup } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
-    fullname: "",
+    fullName: "",
     username: "",
     email: "",
     password: "",
@@ -29,64 +25,62 @@ function SignupModal({ open, setOpen }) {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [open, setOpen]);
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (open) {
+      setForm({
+        fullName: "",
+        username: "",
+        email: "",
+        password: "",
+      });
+      setError("");
+    }
+  }, [open]);
+
   if (!open) return null;
 
   const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const signup = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
 
     // Basic validation
-    if (form.password.length < VALIDATION.MIN_PASSWORD_LENGTH) {
-      alert(`Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH} characters long`);
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters long");
       return;
     }
 
-    if (form.username.length < VALIDATION.MIN_USERNAME_LENGTH) {
-      alert(`Username must be at least ${VALIDATION.MIN_USERNAME_LENGTH} characters long`);
+    if (form.username.length < 3) {
+      setError("Username must be at least 3 characters long");
       return;
     }
 
-    if (form.username.length > VALIDATION.MAX_USERNAME_LENGTH) {
-      alert(`Username must be less than ${VALIDATION.MAX_USERNAME_LENGTH} characters`);
+    if (form.username.length > 50) {
+      setError("Username must be less than 50 characters");
       return;
     }
 
-    if (form.fullname.length > VALIDATION.MAX_FULLNAME_LENGTH) {
-      alert(`Full name must be less than ${VALIDATION.MAX_FULLNAME_LENGTH} characters`);
+    if (form.fullName.length > 100) {
+      setError("Full name must be less than 100 characters");
       return;
     }
 
     setLoading(true);
+    setError("");
 
     try {
-      const res = await createUserWithEmailAndPassword(
-        auth,
+      await signup(
         form.email.trim(),
-        form.password
+        form.password,
+        form.username.trim(),
+        form.fullName.trim()
       );
-
-      const ref = doc(db, "users", res.user.uid);
-      const userData = {
-        fullname: form.fullname.trim(),
-        username: form.username.trim(),
-        email: form.email.trim(),
-        photoURL: "",
-        createdAt: serverTimestamp(),
-        ...INITIAL_USER_STATS
-      };
-
-      await setDoc(ref, userData);
-
-      setCurrentUser({
-        uid: res.user.uid,
-        ...userData
-      });
 
       setOpen(false);
     } catch (err) {
       console.error("Signup error:", err);
-      alert(formatAuthError(err));
+      setError(err.message || "Failed to create account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -98,18 +92,46 @@ function SignupModal({ open, setOpen }) {
         <span className="close" onClick={() => setOpen(false)}>&times;</span>
         <h2>Sign Up</h2>
 
-        <form onSubmit={signup}>
+        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+
+        <form onSubmit={handleSignup}>
           <label>Full Name</label>
-          <input name="fullname" onChange={update} disabled={loading} required />
+          <input 
+            name="fullName" 
+            value={form.fullName}
+            onChange={update} 
+            disabled={loading} 
+            required 
+          />
 
           <label>Username</label>
-          <input name="username" onChange={update} disabled={loading} required />
+          <input 
+            name="username" 
+            value={form.username}
+            onChange={update} 
+            disabled={loading} 
+            required 
+          />
 
           <label>Email</label>
-          <input name="email" type="email" onChange={update} disabled={loading} required />
+          <input 
+            name="email" 
+            type="email"
+            value={form.email}
+            onChange={update} 
+            disabled={loading} 
+            required 
+          />
 
           <label>Password</label>
-          <input name="password" type="password" onChange={update} disabled={loading} required />
+          <input 
+            name="password" 
+            type="password"
+            value={form.password}
+            onChange={update} 
+            disabled={loading} 
+            required 
+          />
 
           <button className="btn submit-form" type="submit" disabled={loading}>
             {loading ? "Creating Account..." : "Create Account"}

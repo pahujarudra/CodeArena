@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { db } from "../../firebase";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
+import { contestAPI } from "../../utils/api";
 import PropTypes from "prop-types";
-import { formatFirestoreError } from "../../utils/errorHandling";
 
 function AddContestModal({ open, setOpen, onContestAdded }) {
   const [loading, setLoading] = useState(false);
@@ -47,16 +45,30 @@ function AddContestModal({ open, setOpen, onContestAdded }) {
         return;
       }
 
+      // Calculate duration in minutes
+      const durationMinutes = Math.floor((endDateTime - startDateTime) / (1000 * 60));
+
+      // Format dates for MySQL (YYYY-MM-DD HH:mm:ss)
+      const formatDateForMySQL = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      };
+
       const contestData = {
         title: form.title.trim(),
         description: form.description.trim(),
-        startTime: Timestamp.fromDate(startDateTime),
-        endTime: Timestamp.fromDate(endDateTime),
-        createdAt: Timestamp.now(),
-        problemCount: 0
+        startTime: formatDateForMySQL(startDateTime),
+        endTime: formatDateForMySQL(endDateTime),
+        durationMinutes: durationMinutes
       };
 
-      await addDoc(collection(db, "contests"), contestData);
+      console.log('Sending contest data:', contestData);
+      await contestAPI.create(contestData);
       
       if (onContestAdded) onContestAdded();
       setOpen(false);
@@ -74,7 +86,7 @@ function AddContestModal({ open, setOpen, onContestAdded }) {
       alert("Contest added successfully!");
     } catch (err) {
       console.error("Error adding contest:", err);
-      alert(formatFirestoreError(err));
+      alert(err.message || "Failed to add contest");
     } finally {
       setLoading(false);
     }

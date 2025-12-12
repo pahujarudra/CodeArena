@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
-import { collection, getDocs, doc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
+import { contestAPI, problemAPI } from "../utils/api";
 import AddContestModal from "../components/modals/AddContestModal";
 import AddProblemModal from "../components/modals/AddProblemModal";
 
@@ -29,26 +28,15 @@ function Admin() {
         return;
       }
 
-      // Check if isAdmin is already in currentUser (from AuthContext)
-      if (currentUser.isAdmin === true) {
+      // Check if role is admin (from AuthContext)
+      if (currentUser.role === 'admin') {
         setIsAdmin(true);
         setLoading(false);
         return;
       }
 
-      // Fallback: check Firestore directly
-      try {
-        const userDoc = await getDocs(query(collection(db, "users"), where("__name__", "==", currentUser.uid)));
-        if (!userDoc.empty) {
-          const userData = userDoc.docs[0].data();
-          setIsAdmin(userData.isAdmin === true);
-        }
-      } catch (error) {
-        console.error("Error checking admin status:", error);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
+      setIsAdmin(false);
+      setLoading(false);
     };
 
     checkAdmin();
@@ -57,33 +45,37 @@ function Admin() {
   // Load contests
   const loadContests = async () => {
     try {
-      const snap = await getDocs(collection(db, "contests"));
-      const list = [];
+      const list = await contestAPI.getAll();
       
-      // Get all contests first
-      for (const docSnap of snap.docs) {
-        const data = docSnap.data();
-        
-        // Count actual problems for this contest
-        const problemsQuery = query(
-          collection(db, "problems"), 
-          where("contestId", "==", docSnap.id)
-        );
-        const problemsSnap = await getDocs(problemsQuery);
-        const actualProblemCount = problemsSnap.size;
-        
-        list.push({
-          id: docSnap.id,
-          title: data.title,
-          description: data.description,
-          startTime: data.startTime?.toDate(),
-          endTime: data.endTime?.toDate(),
-          problemCount: actualProblemCount
-        });
-      }
+      // Get problem counts for each contest
+      const contestsWithCounts = await Promise.all(
+        list.map(async (data) => {
+          try {
+            const problems = await problemAPI.getByContest(data.contestId);
+            return {
+              id: data.contestId,
+              title: data.title,
+              description: data.description,
+              startTime: new Date(data.startTime),
+              endTime: new Date(data.endTime),
+              problemCount: problems.length
+            };
+          } catch (error) {
+            console.error(`Error loading problems for contest ${data.contestId}:`, error);
+            return {
+              id: data.contestId,
+              title: data.title,
+              description: data.description,
+              startTime: new Date(data.startTime),
+              endTime: new Date(data.endTime),
+              problemCount: 0
+            };
+          }
+        })
+      );
       
-      list.sort((a, b) => b.startTime - a.startTime);
-      setContests(list);
+      contestsWithCounts.sort((a, b) => b.startTime - a.startTime);
+      setContests(contestsWithCounts);
     } catch (error) {
       console.error("Error loading contests:", error);
       alert("Failed to load contests");
@@ -93,24 +85,24 @@ function Admin() {
   // Load problems
   const loadProblems = async (contestId = null) => {
     try {
-      let q = collection(db, "problems");
+      let list;
       if (contestId) {
-        q = query(collection(db, "problems"), where("contestId", "==", contestId));
+        list = await problemAPI.getByContest(contestId);
+      } else {
+        list = await problemAPI.getAll();
       }
       
-      const snap = await getDocs(q);
-      const list = [];
+      const processedList = list.map(data => ({
+        id: data.problemId,
+        title: data.title,
+        description: data.description,
+        difficulty: data.difficulty,
+        points: data.maxScore,
+        contestId: data.contestId,
+        testCaseCount: 0  // We don't get test cases in the list view
+      }));
       
-      snap.forEach(docSnap => {
-        const data = docSnap.data();
-        list.push({
-          id: docSnap.id,
-          ...data,
-          testCaseCount: data.testCases?.length || 0
-        });
-      });
-      
-      setProblems(list);
+      setProblems(processedList);
     } catch (error) {
       console.error("Error loading problems:", error);
       alert("Failed to load problems");
@@ -124,13 +116,7 @@ function Admin() {
     }
 
     try {
-      // Delete associated problems
-      const problemsSnap = await getDocs(query(collection(db, "problems"), where("contestId", "==", contestId)));
-      const deletePromises = problemsSnap.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-
-      // Delete contest
-      await deleteDoc(doc(db, "contests", contestId));
+      await contestAPI.delete(contestId);
       
       alert("Contest and associated problems deleted successfully");
       loadContests();
@@ -151,7 +137,7 @@ function Admin() {
     }
 
     try {
-      await deleteDoc(doc(db, "problems", problemId));
+      await problemAPI.delete(problemId);
       alert("Problem deleted successfully");
       loadProblems(selectedContest);
       loadContests(); // Refresh contest list to update problem count

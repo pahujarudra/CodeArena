@@ -3,15 +3,25 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import LoginModal from "./modals/LoginModal";
 import SignupModal from "./modals/SignupModal";
-import { DEFAULT_AVATAR_URL } from "../utils/constants";
 import PropTypes from "prop-types";
 
 function Navbar({ signupOpen, setSignupOpen }) {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin, logout } = useAuth();
 
   // modal states
   const [loginOpen, setLoginOpen] = useState(false);
+
+  const handleLogout = async () => {
+    if (window.confirm("Are you sure you want to logout?")) {
+      await logout();
+      navigate("/");
+    }
+  };
+
+  const getAvatarUrl = () => {
+    return currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.username || 'User')}&background=random`;
+  };
 
   return (
     <>
@@ -38,7 +48,7 @@ function Navbar({ signupOpen, setSignupOpen }) {
           {currentUser && (
             <>
               <Link to="/profile" className="nav-link">Profile</Link>
-              {currentUser.isAdmin && (
+              {isAdmin && (
                 <Link to="/admin" className="nav-link">Admin</Link>
               )}
             </>
@@ -55,16 +65,19 @@ function Navbar({ signupOpen, setSignupOpen }) {
           )}
 
           {currentUser && (
-            <div className="user-profile" onClick={() => navigate("/profile")}>
-              <div className="user-avatar">
-                <img
-                  src={currentUser.photoURL || DEFAULT_AVATAR_URL}
-                  alt={`${currentUser.fullname}'s avatar`}
-                  className="avatar-img"
-                />
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div className="user-profile" onClick={() => navigate("/profile")}>
+                <div className="user-avatar">
+                  <img
+                    src={getAvatarUrl()}
+                    alt={`${currentUser.fullName}'s avatar`}
+                    className="avatar-img"
+                  />
+                </div>
 
-              <span className="nav-fullname">{currentUser.fullname}</span>
+                <span className="nav-fullname">{currentUser.fullName || currentUser.username}</span>
+              </div>
+              <button className="btn" onClick={handleLogout} style={{ padding: "5px 15px" }}>Logout</button>
             </div>
           )}
         </div>

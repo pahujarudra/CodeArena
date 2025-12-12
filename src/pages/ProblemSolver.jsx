@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { doc, getDoc, collection, addDoc, updateDoc, increment } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
+import { problemAPI, submissionAPI } from "../utils/api";
 import CodeEditor from "../components/CodeEditor";
 
 function ProblemSolver() {
@@ -69,17 +68,37 @@ const rl = readline.createInterface({
   const loadProblem = async () => {
     try {
       setLoading(true);
-      const problemDoc = await getDoc(doc(db, "problems", problemId));
+      const problemData = await problemAPI.getById(problemId);
       
-      if (!problemDoc.exists()) {
+      console.log('Loaded problem data:', problemData);
+      
+      if (!problemData) {
         alert("Problem not found");
         navigate("/contests");
         return;
       }
 
       setProblem({
-        id: problemDoc.id,
-        ...problemDoc.data()
+        id: problemData.problem_id || problemData.problemId,
+        title: problemData.title,
+        description: problemData.description,
+        difficulty: problemData.difficulty,
+        points: problemData.maxScore || problemData.max_score || problemData.points,
+        contestId: problemData.contestId || problemData.contest_id,
+        contestTitle: problemData.contest_title,
+        timeLimit: problemData.timeLimit || problemData.time_limit,
+        memoryLimit: problemData.memoryLimit || problemData.memory_limit,
+        inputFormat: problemData.input_format,
+        outputFormat: problemData.output_format,
+        constraints: problemData.constraints,
+        sampleInput: problemData.sample_input,
+        sampleOutput: problemData.sample_output,
+        testCases: (problemData.sampleTestCases || problemData.test_cases || []).map(tc => ({
+          input: tc.input,
+          output: tc.expectedOutput || tc.expected_output || tc.output || '',
+          isHidden: !tc.is_sample && tc.is_sample !== undefined,
+          points: tc.points || 10
+        }))
       });
       
       setCode(defaultCode[language]);
@@ -117,12 +136,16 @@ const rl = readline.createInterface({
     try {
       const response = await fetch('https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=true&wait=false', options);
       
+      console.log('Judge0 submission response status:', response.status);
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Judge0 API error:', errorText);
         throw new Error(`API Error ${response.status}: ${errorText}`);
       }
       
       const data = await response.json();
+      console.log('Judge0 submission data:', data);
       
       if (!data.token) {
         throw new Error('No submission token received from Judge0');
@@ -151,6 +174,8 @@ const rl = readline.createInterface({
         }
         
         result = await resultResponse.json();
+        
+        console.log(`Poll attempt ${attempts + 1}, status:`, result.status);
         
         // Status: 1=In Queue, 2=Processing, 3=Accepted, 4+=Error
         if (result.status.id > 2) break;
@@ -182,6 +207,9 @@ const rl = readline.createInterface({
     try {
       // Get non-hidden test cases from problem.testCases
       const nonHiddenTestCases = (problem?.testCases || []).filter(tc => !tc.isHidden);
+      
+      console.log('Problem test cases:', problem?.testCases);
+      console.log('Non-hidden test cases to run:', nonHiddenTestCases);
       
       // Decide what to run:
       // 1. If there are non-hidden test cases, run those
@@ -369,99 +397,26 @@ const rl = readline.createInterface({
       const passedCount = results.filter(r => r.passed).length;
       const totalCount = results.length;
       
-      // Save submission
+      // Save submission via API
       const submissionData = {
-        userId: currentUser.uid,
-        username: currentUser.username || currentUser.email,
         problemId: problemId,
-        problemTitle: problem.title,
         contestId: problem.contestId || null,
-        contestTitle: problem.contestTitle || 'Practice',
         code,
         language,
         status: accepted ? 'Accepted' : 'Wrong Answer',
         passedTests: passedCount,
         totalTests: totalCount,
-        submittedAt: new Date(),
-        points: accepted ? problem.points : 0,
-        difficulty: problem.difficulty || 'medium'
+        points: accepted ? problem.points : 0
       };
       
-      console.log('📝 Saving submission to Firestore...', submissionData);
-      await addDoc(collection(db, 'submissions'), submissionData);
+      console.log('📝 Saving submission via API...', submissionData);
+      await submissionAPI.submit(submissionData);
       console.log('✅ Submission saved successfully');
       
-      // Update user stats
-      const userRef = doc(db, 'users', currentUser.uid);
-      console.log('📊 Fetching user data...');
-      const userDoc = await getDoc(userRef);
-      const userData = userDoc.data() || {};
-      console.log('Current user data:', userData);
-      
-      const userUpdates = {
-        totalSubmissions: increment(1)
-      };
-      
-      // Update difficulty-based problem count
-      if (accepted) {
-        userUpdates.problemsSolved = increment(1);
-        userUpdates.totalPoints = increment(problem.points || 0);
-        
-        // Track problems by difficulty
-        const difficulty = (problem.difficulty || 'medium').toLowerCase();
-        userUpdates[`problemsByDifficulty.${difficulty}`] = increment(1);
-        console.log(`✨ Updating ${difficulty} problems count`);
-      }
-      
-      // Track contest participation
-      if (problem.contestId) {
-        const participatedContests = userData.participatedContests || [];
-        if (!participatedContests.includes(problem.contestId)) {
-          userUpdates.participatedContests = [...participatedContests, problem.contestId];
-          userUpdates.contestsParticipated = increment(1);
-          console.log('🏆 New contest participation recorded');
-        }
-      }
-      
-      // Update recent activities (keep last 10)
-      const newActivity = {
-        problemId: problemId,
-        problemTitle: problem.title,
-        contestId: problem.contestId || null,
-        contestTitle: problem.contestTitle || 'Practice',
-        status: accepted ? 'Accepted' : 'Wrong Answer',
-        passedTests: passedCount,
-        totalTests: totalCount,
-        submittedAt: new Date(),
-        difficulty: problem.difficulty || 'medium'
-      };
-      
-      const recentActivities = userData.recentActivities || [];
-      const updatedActivities = [newActivity, ...recentActivities].slice(0, 10);
-      userUpdates.recentActivities = updatedActivities;
-      
-      console.log('🔄 Updating user stats...', userUpdates);
-      await updateDoc(userRef, userUpdates);
-      console.log('✅ User stats updated successfully');
-      
-      // Update problem stats
-      const problemRef = doc(db, 'problems', problemId);
-      const problemUpdates = {
-        totalSubmissions: increment(1)
-      };
-      
-      if (accepted) {
-        problemUpdates.acceptedSubmissions = increment(1);
-      }
-      
-      console.log('📈 Updating problem stats...');
-      await updateDoc(problemRef, problemUpdates);
-      console.log('✅ Problem stats updated successfully');
-      
-      console.log('🎉 All updates completed successfully!');
+      console.log('� Submission completed successfully!');
     } catch (error) {
       console.error('❌ Error saving submission:', error);
-      console.error('Error details:', error.message, error.code);
+      console.error('Error details:', error.message);
       alert(`Failed to save submission: ${error.message}`);
     }
   };
@@ -565,19 +520,37 @@ const rl = readline.createInterface({
                   </div>
                 )}
 
-                {(problem.sampleInput || problem.sampleOutput) && (
+                {/* Display sample test cases from testCases array */}
+                {problem.testCases && problem.testCases.filter(tc => !tc.isHidden).length > 0 && (
                   <div className="problem-section">
-                    <h3>💡 Sample Test Case</h3>
-                    <div className="sample-io">
-                      <div>
-                        <strong>Input:</strong>
-                        <pre className="sample-code">{problem.sampleInput}</pre>
-                      </div>
-                      <div>
-                        <strong>Output:</strong>
-                        <pre className="sample-code">{problem.sampleOutput}</pre>
-                      </div>
-                    </div>
+                    <h3>💡 Sample Test Cases</h3>
+                    {problem.testCases
+                      .filter(tc => !tc.isHidden)
+                      .map((testCase, index) => (
+                        <div key={index} style={{ marginBottom: index < problem.testCases.filter(tc => !tc.isHidden).length - 1 ? '24px' : 0 }}>
+                          {problem.testCases.filter(tc => !tc.isHidden).length > 1 && (
+                            <h4 style={{ 
+                              color: 'var(--primary)', 
+                              fontSize: '0.95rem', 
+                              marginBottom: '12px',
+                              fontWeight: '600'
+                            }}>
+                              Example {index + 1}:
+                            </h4>
+                          )}
+                          <div className="sample-io">
+                            <div>
+                              <strong>Input:</strong>
+                              <pre className="sample-code">{testCase.input}</pre>
+                            </div>
+                            <div>
+                              <strong>Output:</strong>
+                              <pre className="sample-code">{testCase.output}</pre>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    }
                     {problem.sampleExplanation && (
                       <div style={{ 
                         marginTop: '16px', 

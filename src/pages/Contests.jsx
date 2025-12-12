@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { contestAPI } from "../utils/api";
 
 function Contests() {
   const navigate = useNavigate();
@@ -13,53 +12,52 @@ function Contests() {
   const loadContests = async () => {
     try {
       setLoading(true);
-      console.log("Loading contests from Firestore...");
-      const snap = await getDocs(collection(db, "contests"));
-      console.log("Contests snapshot received. Empty?", snap.empty, "Size:", snap.size);
+      console.log("Loading contests from API...");
+      const list = await contestAPI.getAll();
+      console.log("Contests received:", list);
+      
+      if (!Array.isArray(list)) {
+        console.error("Invalid response format:", list);
+        setContests([]);
+        setLoading(false);
+        return;
+      }
       
       const now = new Date();
-      let list = [];
-
-      snap.forEach(docSnap => {
-        const data = docSnap.data();
-        console.log("Contest data:", docSnap.id, data);
+      const processedList = list.map(data => {
+        console.log("Contest data:", data.contestId, data);
         
-        const start = data.startTime?.toDate();
-        const end = data.endTime?.toDate();
-
-        if (!start || !end) {
-          console.warn("Skipping contest with invalid dates:", docSnap.id);
-          return;
-        }
+        const start = new Date(data.startTime);
+        const end = new Date(data.endTime);
 
         const status =
           now < start ? "upcoming" :
           now >= start && now <= end ? "active" :
           "ended";
 
-        list.push({
-          id: docSnap.id,
+        return {
+          id: data.contestId,
           title: data.title || "Untitled Contest",
           description: data.description || "",
           start,
           end,
           status
-        });
+        };
       });
 
-      console.log("Loaded contests:", list.length, list);
+      console.log("Loaded contests:", processedList.length, processedList);
 
       // sort by status priority then time
       const priority = { active: 1, upcoming: 2, ended: 3 };
 
-      list.sort((a, b) => {
+      processedList.sort((a, b) => {
         if (priority[a.status] !== priority[b.status]) {
           return priority[a.status] - priority[b.status];
         }
         return a.start - b.start;
       });
 
-      setContests(list);
+      setContests(processedList);
       setLoading(false);
     } catch (error) {
       console.error("Error loading contests:", error);

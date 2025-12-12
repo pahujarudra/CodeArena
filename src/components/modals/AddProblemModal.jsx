@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { db } from "../../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { problemAPI } from "../../utils/api";
 import PropTypes from "prop-types";
-import { formatFirestoreError } from "../../utils/errorHandling";
 
 function AddProblemModal({ open, setOpen, contestId, onProblemAdded }) {
   const [loading, setLoading] = useState(false);
@@ -68,22 +66,23 @@ function AddProblemModal({ open, setOpen, contestId, onProblemAdded }) {
 
     try {
       const problemData = {
-        ...form,
-        points: Number(form.points),
+        title: form.title.trim(),
+        description: form.description.trim(),
+        difficulty: form.difficulty,
+        maxScore: Number(form.points),
         timeLimit: Number(form.timeLimit),
         memoryLimit: Number(form.memoryLimit),
         contestId,
         testCases: testCases.map(tc => ({
           input: tc.input.trim(),
-          output: tc.output.trim(),
-          isHidden: tc.isHidden
-        })),
-        createdAt: serverTimestamp(),
-        submissions: 0,
-        accepted: 0
+          expectedOutput: tc.output.trim(),
+          isSample: tc.isHidden ? 0 : 1,
+          points: 10
+        }))
       };
 
-      await addDoc(collection(db, "problems"), problemData);
+      console.log('Sending problem data:', problemData);
+      await problemAPI.create(problemData);
       
       if (onProblemAdded) onProblemAdded();
       setOpen(false);
@@ -107,7 +106,7 @@ function AddProblemModal({ open, setOpen, contestId, onProblemAdded }) {
       alert("Problem added successfully!");
     } catch (err) {
       console.error("Error adding problem:", err);
-      alert(formatFirestoreError(err));
+      alert(err.message || "Failed to add problem");
     } finally {
       setLoading(false);
     }

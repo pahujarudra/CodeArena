@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { auth, db } from "../firebase";
-import { signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import EditProfileModal from "../components/modals/EditProfileModal";
 import { DEFAULT_AVATAR_URL } from "../utils/constants";
+import { userAPI } from "../utils/api";
 
 function Profile() {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
   const [userData, setUserData] = useState(null);
@@ -20,11 +18,9 @@ function Profile() {
       
       try {
         setLoading(true);
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-          console.log('Profile data loaded:', userDoc.data());
-        }
+        const data = await userAPI.getById(currentUser.userId);
+        setUserData(data);
+        console.log('Profile data loaded:', data);
       } catch (error) {
         console.error('Error loading user data:', error);
       } finally {
@@ -73,15 +69,23 @@ function Profile() {
     );
   }
 
-  const problemsSolved = userData?.problemsSolved || 0;
-  const easyProblems = userData?.problemsByDifficulty?.easy || 0;
-  const mediumProblems = userData?.problemsByDifficulty?.medium || 0;
-  const hardProblems = userData?.problemsByDifficulty?.hard || 0;
-  const totalPoints = userData?.totalPoints || 0;
+  const problemsSolved = userData?.totalSolved || 0;
+  const easyProblems = userData?.problems_by_difficulty?.easy || 0;
+  const mediumProblems = userData?.problems_by_difficulty?.medium || 0;
+  const hardProblems = userData?.problems_by_difficulty?.hard || 0;
+  const totalPoints = userData?.rating || 0;
   const totalSubmissions = userData?.totalSubmissions || 0;
-  const contestsParticipated = userData?.contestsParticipated || 0;
+  const contestsParticipated = userData?.contests_participated || 0;
   const recentActivities = userData?.recentActivities || [];
-  const joinedDate = userData?.createdAt?.toDate() || (currentUser.metadata?.creationTime ? new Date(currentUser.metadata.creationTime) : new Date());
+  const joinedDate = userData?.createdAt ? new Date(userData.createdAt) : new Date();
+
+  console.log('Profile rendering with:', {
+    userData,
+    problemsSolved,
+    totalSubmissions,
+    totalPoints,
+    recentActivities
+  });
 
   return (
     <section id="profile" className="page">
@@ -121,12 +125,12 @@ function Profile() {
           <div className="avatar">
             <img
               className="avatar-img"
-              alt={`${currentUser.fullname}'s profile picture`}
-              src={currentUser.photoURL || DEFAULT_AVATAR_URL}
+              alt={`${currentUser.fullName}'s profile picture`}
+              src={currentUser.avatarUrl || DEFAULT_AVATAR_URL}
             />
           </div>
 
-          <div className="profile-fullname">{currentUser.fullname}</div>
+          <div className="profile-fullname">{currentUser.fullName}</div>
           <div className="username">@{currentUser.username}</div>
           <div className="email">{currentUser.email}</div>
           
@@ -147,7 +151,7 @@ function Profile() {
             ✏️ Edit Profile
           </button>
 
-          <button className="logout-btn btn" onClick={() => signOut(auth)}>
+          <button className="logout-btn btn" onClick={logout}>
             🚪 Logout
           </button>
         </div>
@@ -431,7 +435,7 @@ function Profile() {
                     e.currentTarget.style.transform = 'translateX(0)';
                     e.currentTarget.style.boxShadow = 'none';
                   }}
-                  onClick={() => navigate(`/problems/${activity.problemId}`)}
+                  onClick={() => activity.problemId && navigate(`/problems/${activity.problemId}`)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                     <div style={{ flex: 1 }}>
@@ -445,16 +449,39 @@ function Profile() {
                         gap: '8px'
                       }}>
                         <span style={{ fontSize: '1.2rem' }}>
-                          {activity.status === 'Accepted' ? '✅' : '❌'}
+                          {activity.status === 'Accepted' ? '✅' : 
+                           activity.type === 'solved_problem' ? '✅' : 
+                           activity.type === 'attempted_problem' ? '❌' : '📝'}
                         </span>
-                        {activity.problemTitle}
+                        {activity.problemTitle || activity.description}
                       </div>
                       <div style={{ 
                         fontSize: '0.85rem', 
                         color: 'var(--text-secondary)',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        display: 'flex',
+                        gap: '12px',
+                        alignItems: 'center'
                       }}>
-                        📚 {activity.contestTitle || 'Practice'}
+                        {activity.contestTitle && (
+                          <span>📚 {activity.contestTitle}</span>
+                        )}
+                        {activity.difficulty && (
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            background: activity.difficulty === 'Easy' ? 'rgba(34, 197, 94, 0.15)' :
+                                       activity.difficulty === 'Medium' ? 'rgba(251, 191, 36, 0.15)' :
+                                       'rgba(239, 68, 68, 0.15)',
+                            color: activity.difficulty === 'Easy' ? '#22c55e' :
+                                   activity.difficulty === 'Medium' ? '#fbbf24' :
+                                   '#ef4444'
+                          }}>
+                            {activity.difficulty}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span style={{
@@ -462,14 +489,22 @@ function Profile() {
                       borderRadius: '8px',
                       fontSize: '0.75rem',
                       fontWeight: '700',
-                      background: activity.status === 'Accepted' 
+                      background: activity.status === 'Accepted' || activity.type === 'solved_problem'
                         ? 'rgba(34, 197, 94, 0.15)' 
-                        : 'rgba(239, 68, 68, 0.15)',
-                      color: activity.status === 'Accepted' ? '#22c55e' : '#ef4444',
+                        : activity.type === 'attempted_problem'
+                        ? 'rgba(239, 68, 68, 0.15)'
+                        : 'rgba(148, 163, 184, 0.15)',
+                      color: activity.status === 'Accepted' || activity.type === 'solved_problem' 
+                        ? '#22c55e' 
+                        : activity.type === 'attempted_problem'
+                        ? '#ef4444'
+                        : '#94a3b8',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px'
                     }}>
-                      {activity.status === 'Accepted' ? 'Solved' : 'Failed'}
+                      {activity.status === 'Accepted' || activity.type === 'solved_problem' ? 'Solved' : 
+                       activity.type === 'attempted_problem' ? 'Attempted' : 
+                       activity.type}
                     </span>
                   </div>
                   <div style={{ 
@@ -482,11 +517,11 @@ function Profile() {
                     borderTop: '1px solid var(--border-color)'
                   }}>
                     <span>
-                      🎯 {activity.passedTests}/{activity.totalTests} tests
+                      🎯 {activity.passed_tests}/{activity.total_tests} tests
                     </span>
                     <span>
-                      {activity.submittedAt?.toDate ? 
-                        new Date(activity.submittedAt.toDate()).toLocaleDateString('en-US', { 
+                      {activity.submitted_at ? 
+                        new Date(activity.submitted_at).toLocaleDateString('en-US', { 
                           month: 'short', 
                           day: 'numeric',
                           hour: '2-digit',

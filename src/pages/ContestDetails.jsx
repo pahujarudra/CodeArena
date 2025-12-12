@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { contestAPI, problemAPI } from "../utils/api";
 
 function ContestDetails() {
   const { contestId } = useParams();
@@ -16,16 +15,17 @@ function ContestDetails() {
         setLoading(true);
         
         // Load contest
-        const contestDoc = await getDoc(doc(db, "contests", contestId));
-        if (!contestDoc.exists()) {
+        const contestData = await contestAPI.getById(contestId);
+        console.log('Contest data:', contestData);
+        
+        if (!contestData) {
           alert("Contest not found");
           navigate("/contests");
           return;
         }
 
-        const contestData = contestDoc.data();
-        const start = contestData.startTime?.toDate();
-        const end = contestData.endTime?.toDate();
+        const start = new Date(contestData.startTime || contestData.start_time);
+        const end = new Date(contestData.endTime || contestData.end_time);
         const now = new Date();
 
         const status =
@@ -34,7 +34,7 @@ function ContestDetails() {
           "ended";
 
         setContest({
-          id: contestDoc.id,
+          id: contestData.contestId || contestData.contest_id,
           title: contestData.title,
           description: contestData.description,
           start,
@@ -42,29 +42,23 @@ function ContestDetails() {
           status
         });
 
-        // Load problems
-        const problemsQuery = query(
-          collection(db, "problems"),
-          where("contestId", "==", contestId)
-        );
-        const problemsSnap = await getDocs(problemsQuery);
+        // Load problems for this contest
+        const problemsList = await problemAPI.getByContest(contestId);
         
-        const problemsList = [];
-        problemsSnap.forEach(docSnap => {
-          const data = docSnap.data();
-          problemsList.push({
-            id: docSnap.id,
-            title: data.title,
-            difficulty: data.difficulty,
-            points: data.points,
-            totalSubmissions: data.totalSubmissions || 0,
-            acceptedSubmissions: data.acceptedSubmissions || 0,
-            status: 'unsolved' // TODO: Fetch user's status
-          });
-        });
+        console.log('Loaded problems:', problemsList);
+        
+        const processedProblems = problemsList.map(data => ({
+          id: data.problemId || data.problem_id,
+          title: data.title,
+          difficulty: data.difficulty,
+          points: data.maxScore || data.max_score || data.points || 0,
+          totalSubmissions: data.totalSubmissions || data.total_submissions || 0,
+          acceptedSubmissions: data.acceptedSubmissions || data.accepted_submissions || 0,
+          status: 'unsolved' // TODO: Fetch user's status
+        }));
 
-        problemsList.sort((a, b) => a.points - b.points);
-        setProblems(problemsList);
+        processedProblems.sort((a, b) => a.points - b.points);
+        setProblems(processedProblems);
         
       } catch (error) {
         console.error("Error loading contest details:", error);

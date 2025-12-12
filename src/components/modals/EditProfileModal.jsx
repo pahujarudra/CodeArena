@@ -1,18 +1,15 @@
 import { useState, useEffect } from "react";
-import { db } from "../../firebase";
-import { doc, updateDoc } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import PropTypes from "prop-types";
-import { formatFirestoreError } from "../../utils/errorHandling";
 
 function EditProfileModal({ open, setOpen }) {
-  const { currentUser, setCurrentUser } = useAuth();
+  const { currentUser, updateProfile } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
-    fullname: currentUser?.fullname || "",
+    fullName: currentUser?.fullName || "",
     username: currentUser?.username || "",
-    photoURL: currentUser?.photoURL || ""
+    avatarUrl: currentUser?.avatarUrl || ""
   });
 
   // ESC key handler
@@ -35,25 +32,16 @@ function EditProfileModal({ open, setOpen }) {
     setLoading(true);
 
     try {
-      const ref = doc(db, "users", currentUser.uid);
-
-      await updateDoc(ref, {
-        fullname: form.fullname.trim(),
+      await updateProfile({
+        fullName: form.fullName.trim(),
         username: form.username.trim(),
-        photoURL: form.photoURL.trim()
-      });
-
-      setCurrentUser({
-        ...currentUser,
-        fullname: form.fullname.trim(),
-        username: form.username.trim(),
-        photoURL: form.photoURL.trim()
+        avatarUrl: form.avatarUrl.trim()
       });
 
       setOpen(false);
     } catch (err) {
       console.error("Error updating profile:", err);
-      alert(formatFirestoreError(err));
+      alert(err.message || "Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -67,13 +55,13 @@ function EditProfileModal({ open, setOpen }) {
 
         <form onSubmit={save}>
           <label>Full Name:</label>
-          <input name="fullname" value={form.fullname} onChange={update} disabled={loading} required />
+          <input name="fullName" value={form.fullName} onChange={update} disabled={loading} required />
 
           <label>Username:</label>
           <input name="username" value={form.username} onChange={update} disabled={loading} required />
 
-          <label>Photo URL:</label>
-          <input type="url" name="photoURL" value={form.photoURL} onChange={update} disabled={loading} />
+          <label>Avatar URL:</label>
+          <input type="url" name="avatarUrl" value={form.avatarUrl} onChange={update} disabled={loading} />
 
           <button className="btn submit-form" type="submit" disabled={loading}>
             {loading ? "Saving..." : "Save Changes"}

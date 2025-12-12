@@ -1,16 +1,13 @@
 import { useAuth } from "../../context/AuthContext";
-import { auth, db } from "../../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { formatAuthError } from "../../utils/errorHandling";
 
 function LoginModal({ open, setOpen }) {
-  const { setCurrentUser } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // ESC key handler
   useEffect(() => {
@@ -23,26 +20,28 @@ function LoginModal({ open, setOpen }) {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [open, setOpen]);
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setPassword("");
+      setError("");
+    }
+  }, [open]);
+
   if (!open) return null;
 
-  const login = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
     try {
-      const res = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const ref = doc(db, "users", res.user.uid);
-      const snap = await getDoc(ref);
-
-      if (snap.exists()) {
-        setCurrentUser({ uid: res.user.uid, ...snap.data() });
-        setOpen(false);
-      } else {
-        throw new Error("User data not found");
-      }
+      await login(email.trim(), password);
+      setOpen(false);
     } catch (err) {
       console.error("Login error:", err);
-      alert(formatAuthError(err));
+      setError(err.message || "Failed to login. Please check your credentials.");
     } finally {
       setLoading(false);
     }
@@ -54,7 +53,9 @@ function LoginModal({ open, setOpen }) {
         <span className="close" onClick={() => setOpen(false)}>&times;</span>
         <h2>Login</h2>
 
-        <form onSubmit={login}>
+        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+
+        <form onSubmit={handleLogin}>
           <label>Email:</label>
           <input 
             type="email"
