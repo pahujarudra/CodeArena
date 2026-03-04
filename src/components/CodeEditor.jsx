@@ -1,119 +1,87 @@
-import { useEffect, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import Editor from '@monaco-editor/react';
 
 function CodeEditor({ code, setCode, language }) {
-  const textareaRef = useRef(null);
+  const editorRef = useRef(null);
 
-  useEffect(() => {
-    adjustHeight();
-  }, [code]);
-
-  const adjustHeight = () => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = textarea.scrollHeight + 'px';
-    }
+  // Map language names to Monaco language identifiers
+  const getMonacoLanguage = (lang) => {
+    const languageMap = {
+      'cpp': 'cpp',
+      'c++': 'cpp',
+      'java': 'java',
+      'python': 'python',
+      'javascript': 'javascript',
+      'js': 'javascript',
+      'typescript': 'typescript',
+      'ts': 'typescript',
+      'c': 'c',
+      'csharp': 'csharp',
+      'c#': 'csharp'
+    };
+    return languageMap[lang?.toLowerCase()] || 'cpp';
   };
 
-  const handleKeyDown = (e) => {
-    const textarea = e.target;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+  const handleEditorDidMount = (editor) => {
+    editorRef.current = editor;
     
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const newCode = code.substring(0, start) + '    ' + code.substring(end);
-      setCode(newCode);
-      
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 4;
-      }, 0);
-    }
-    
-    // Auto-indentation on Enter
-    else if (e.key === 'Enter') {
-      e.preventDefault();
-      
-      // Get current line
-      const beforeCursor = code.substring(0, start);
-      const currentLineStart = beforeCursor.lastIndexOf('\n') + 1;
-      const currentLine = beforeCursor.substring(currentLineStart);
-      
-      // Count leading spaces/tabs for indentation
-      const indentMatch = currentLine.match(/^(\s*)/);
-      const currentIndent = indentMatch ? indentMatch[1] : '';
-      
-      // Check if current line ends with { or : (for auto-indent increase)
-      const trimmedLine = currentLine.trim();
-      const shouldIncreaseIndent = trimmedLine.endsWith('{') || 
-                                   trimmedLine.endsWith(':') ||
-                                   (language === 'python' && trimmedLine.endsWith(':'));
-      
-      // Calculate new indent
-      let newIndent = currentIndent;
-      if (shouldIncreaseIndent) {
-        newIndent += '    '; // Add 4 spaces
+    // Update status on content change
+    editor.onDidChangeModelContent(() => {
+      const code = editor.getValue();
+      const lines = code.split("\n").length;
+      const statusElement = document.getElementById('editor-status');
+      if (statusElement) {
+        statusElement.textContent = `Lines: ${lines} | Length: ${code.length}`;
       }
-      
-      // Insert new line with proper indentation
-      const newCode = code.substring(0, start) + '\n' + newIndent + code.substring(end);
-      setCode(newCode);
-      
-      setTimeout(() => {
-        const newCursorPos = start + 1 + newIndent.length;
-        textarea.selectionStart = textarea.selectionEnd = newCursorPos;
-      }, 0);
-    }
-    
-    // Auto-close brackets and quotes
-    else if (e.key === '(' || e.key === '{' || e.key === '[' || e.key === '"' || e.key === "'") {
-      const closingChar = {
-        '(': ')',
-        '{': '}',
-        '[': ']',
-        '"': '"',
-        "'": "'"
-      }[e.key];
-      
-      if (start === end) { // Only if no text is selected
-        e.preventDefault();
-        const newCode = code.substring(0, start) + e.key + closingChar + code.substring(end);
-        setCode(newCode);
-        
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + 1;
-        }, 0);
-      }
-    }
-    
-    // Auto-close on }
-    else if (e.key === '}' && code[start] === '}') {
-      e.preventDefault();
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 1;
-      }, 0);
-    }
+    });
   };
 
-  const addLineNumbers = () => {
-    const lines = code.split('\n').length;
-    return Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  const handleEditorChange = (value) => {
+    setCode(value || '');
   };
 
   return (
     <div className="code-editor-container">
-      <div className="line-numbers">
-        <pre>{addLineNumbers()}</pre>
-      </div>
-      <textarea
-        ref={textareaRef}
-        className="code-editor"
+      <Editor
+        height="100%"
+        language={getMonacoLanguage(language)}
         value={code}
-        onChange={(e) => setCode(e.target.value)}
-        onKeyDown={handleKeyDown}
-        spellCheck="false"
-        placeholder="Write your code here..."
+        onChange={handleEditorChange}
+        onMount={handleEditorDidMount}
+        theme="vs-dark"
+        options={{
+          automaticLayout: true,
+          fontSize: 14,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          scrollbar: { 
+            alwaysConsumeMouseWheel: false 
+          },
+          lineNumbers: 'on',
+          tabSize: 4,
+          insertSpaces: true,
+          wordWrap: 'off',
+          padding: { top: 10, bottom: 10 },
+          suggestOnTriggerCharacters: true,
+          quickSuggestions: true,
+          acceptSuggestionOnEnter: 'on',
+          bracketPairColorization: { enabled: true },
+          formatOnPaste: true,
+          formatOnType: true,
+          autoClosingBrackets: 'always',
+          autoClosingQuotes: 'always',
+          autoIndent: 'full',
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          smoothScrolling: true,
+          folding: true,
+          foldingStrategy: 'indentation',
+          renderLineHighlight: 'all',
+          selectionHighlight: true,
+          occurrencesHighlight: 'singleFile',
+          renderWhitespace: 'selection'
+        }}
       />
     </div>
   );

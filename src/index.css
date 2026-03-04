@@ -3878,45 +3878,11 @@ input[type="number"]:focus {
 .code-editor-container {
     flex: 1;
     display: flex;
-    overflow: auto;
+    overflow: hidden;
     background: #1e1e1e;
     position: relative;
-}
-
-.line-numbers {
-    background: #1e1e1e;
-    color: #858585;
-    padding: 20px 12px;
-    text-align: right;
-    user-select: none;
-    border-right: 1px solid #3e3e42;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    min-width: 55px;
-}
-
-.line-numbers pre {
-    margin: 0;
-}
-
-.code-editor {
-    flex: 1;
-    background: #1e1e1e;
-    color: #d4d4d4;
-    border: none;
-    outline: none;
-    padding: 20px;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    resize: none;
-    overflow: auto;
-    tab-size: 4;
-}
-
-.code-editor::selection {
-    background: #264f78;
+    min-height: 400px;
+    height: 100%;
 }
 
 /* Custom Input Section */
